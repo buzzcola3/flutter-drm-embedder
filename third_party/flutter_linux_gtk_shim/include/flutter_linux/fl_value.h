@@ -68,8 +68,14 @@ FlValue *fl_value_get_map_value(FlValue *value, size_t index);
 FlValue *fl_value_lookup_string(FlValue *map, const gchar *key);
 
 // Mutation
+// The plain forms take a reference on the values passed in; the _take forms
+// take ownership of them, so the caller must not unref what it hands over.
 void fl_value_append(FlValue *list, FlValue *value);
+void fl_value_append_take(FlValue *list, FlValue *value);
 void fl_value_set(FlValue *map, FlValue *key, FlValue *value);
+void fl_value_set_take(FlValue *map, FlValue *key, FlValue *value);
+void fl_value_set_string(FlValue *map, const gchar *key, FlValue *value);
+void fl_value_set_string_take(FlValue *map, const gchar *key, FlValue *value);
 
 G_END_DECLS
 

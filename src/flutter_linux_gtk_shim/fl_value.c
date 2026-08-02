@@ -352,6 +352,13 @@ void fl_value_append(FlValue *list, FlValue *value) {
     g_ptr_array_add(list->value.list, g_object_ref(value));
 }
 
+void fl_value_append_take(FlValue *list, FlValue *value) {
+    g_return_if_fail(list != NULL);
+    g_return_if_fail(value != NULL);
+    fl_value_append(list, value);
+    fl_value_unref(value);
+}
+
 void fl_value_set(FlValue *map, FlValue *key, FlValue *value) {
     g_return_if_fail(map != NULL);
     g_return_if_fail(key != NULL);
@@ -361,4 +368,30 @@ void fl_value_set(FlValue *map, FlValue *key, FlValue *value) {
     }
     g_ptr_array_add(map->value.map.keys, g_object_ref(key));
     g_ptr_array_add(map->value.map.values, g_object_ref(value));
+}
+
+void fl_value_set_take(FlValue *map, FlValue *key, FlValue *value) {
+    g_return_if_fail(map != NULL);
+    g_return_if_fail(key != NULL);
+    g_return_if_fail(value != NULL);
+    fl_value_set(map, key, value);
+    fl_value_unref(key);
+    fl_value_unref(value);
+}
+
+void fl_value_set_string(FlValue *map, const gchar *key, FlValue *value) {
+    g_return_if_fail(map != NULL);
+    g_return_if_fail(key != NULL);
+    g_return_if_fail(value != NULL);
+    FlValue *k = fl_value_new_string(key);
+    fl_value_set(map, k, value);
+    fl_value_unref(k);
+}
+
+void fl_value_set_string_take(FlValue *map, const gchar *key, FlValue *value) {
+    g_return_if_fail(map != NULL);
+    g_return_if_fail(key != NULL);
+    g_return_if_fail(value != NULL);
+    fl_value_set_string(map, key, value);
+    fl_value_unref(value);
 }

@@ -255,6 +255,7 @@ add_library(
   src/flutter_linux_gtk_shim/fl_plugin_registrar.c
   src/flutter_linux_gtk_shim/fl_plugin_registry.c
   src/flutter_linux_gtk_shim/fl_plugin_registrant.c
+  src/flutter_linux_gtk_shim/fl_glib_dispatch.c
   src/plugin_loader.c
 )
 

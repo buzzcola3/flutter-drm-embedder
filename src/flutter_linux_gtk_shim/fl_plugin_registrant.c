@@ -22,6 +22,9 @@ void flutter_drm_embedder_register_gtk_plugins(struct flutter_drm_embedder *flut
     if (loader != NULL) {
         fprintf(stderr, "[plugin_registrant] plugin_loader loaded plugins from bundle dir\n");
         flutter_drm_embedder_set_gtk_plugin_loader(flutter_drm_embedder, loader);
+        // Plugins deliver native->Dart calls via g_idle_add(), which nothing
+        // would otherwise dispatch here.
+        fl_glib_dispatch_start();
     } else {
         fprintf(stderr, "[plugin_registrant] plugin_loader found no plugins in bundle dir\n");
     }
@@ -30,6 +33,8 @@ void flutter_drm_embedder_register_gtk_plugins(struct flutter_drm_embedder *flut
         fprintf(stderr, "[plugin_registrant] fl_register_plugins weak symbol is NULL, skipping static registration\n");
         return;
     }
+
+    fl_glib_dispatch_start();
 
     fprintf(stderr, "[plugin_registrant] calling fl_register_plugins (static registration)\n");
     FlPluginRegistrar *registrar = fl_plugin_registrar_new_for_flutter_drm_embedder(flutter_drm_embedder);

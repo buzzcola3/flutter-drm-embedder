@@ -38,4 +38,13 @@ struct gtk_plugin_loader *flutter_drm_embedder_get_gtk_plugin_loader(struct flut
 void flutter_drm_embedder_set_fl_texture_registrar(struct flutter_drm_embedder *flutter_drm_embedder, void *registrar);
 void *flutter_drm_embedder_get_fl_texture_registrar(struct flutter_drm_embedder *flutter_drm_embedder);
 
+int flutter_drm_embedder_post_platform_task(int (*callback)(void *userdata), void *userdata);
+int flutter_drm_embedder_post_platform_task_with_time(int (*callback)(void *userdata),
+                                                     void *userdata,
+                                                     uint64_t target_time_usec);
+
+/// Starts dispatching GLib's default main context on the platform thread.
+/// Idempotent. See fl_glib_dispatch.c for why plugins need this.
+void fl_glib_dispatch_start(void);
+
 #endif  // FLUTTER_DRM_EMBEDDER_SHIM_H
