@@ -150,6 +150,26 @@ jobs:
         run: |
           mkdir -p release-files
           mv artifacts/*/* release-files/
+
+      # action-gh-release only replaces assets whose exact names it uploads, and never
+      # removes anything else. Assets the build no longer produces (the old gtk-shim
+      # tarballs, a dropped target) therefore survive every re-run and keep being served
+      # as part of the release. Wipe the asset list first so it always matches this build.
+      - name: Delete stale release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          TAG_ENC="${TAG//\//%2F}"
+          ids=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG_ENC}" --jq '.assets[].id' 2>/dev/null || true)
+          if [ -z "$ids" ]; then
+            echo "No existing release/assets for $TAG, nothing to clean."
+            exit 0
+          fi
+          for id in $ids; do
+            echo "Deleting stale asset $id"
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/$id"
+          done
       
       - name: Publish Release
         uses: softprops/action-gh-release@v1
