@@ -82,6 +82,12 @@ if(NOT CMAKE_BUILD_TYPE)
     message(STATUS "CMAKE_BUILD_TYPE not set, defaulting to Release.")
 endif()
 
+# Case-folded build type for comparisons below. CMAKE_BUILD_TYPE is free-form text,
+# and callers do pass lowercase (`-DCMAKE_BUILD_TYPE=release`), so STREQUAL/MATCHES
+# against a capitalised literal silently misses. The $<CONFIG:...> generator
+# expressions used for compile flags are case-insensitive already and need no help.
+string(TOUPPER "${CMAKE_BUILD_TYPE}" BUILD_TYPE_UPPER)
+
 if (BUILD_SENTRY_PLUGIN)
   set(flutter_drm_embedder_languages C CXX ASM)
 else()
@@ -239,9 +245,28 @@ if (NOT GLIB_FOUND OR NOT GOBJECT_FOUND OR NOT GIO_FOUND)
   message(SEND_ERROR "GLib/GObject/GIO not found. Install libglib2.0-dev and libgobject-2.0-dev (and gio).")
 endif()
 
+# Usage requirements for compiling against the GTK shim headers.
+# Plugins consume this but deliberately do NOT link the shim archive: the shim is
+# linked into the flutter-drm-embedder executable, and plugins resolve the fl_*
+# symbols from the executable's dynamic symbol table when they're dlopen'd.
+add_library(flutter_linux_gtk_shim_api INTERFACE)
+
+target_include_directories(flutter_linux_gtk_shim_api INTERFACE
+  ${CMAKE_SOURCE_DIR}/third_party/flutter_linux_gtk_shim/include
+  ${CMAKE_SOURCE_DIR}/third_party/flutter_embedder_header/include
+  ${CMAKE_SOURCE_DIR}/src
+  ${CMAKE_BINARY_DIR}
+)
+
+target_link_libraries(flutter_linux_gtk_shim_api INTERFACE
+  PkgConfig::GLIB
+  PkgConfig::GOBJECT
+  PkgConfig::GIO
+)
+
 add_library(
   flutter_linux_gtk_shim
-  SHARED
+  STATIC
   src/flutter_linux_gtk_shim/fl_binary_messenger.c
   src/flutter_linux_gtk_shim/fl_method_codec.c
   src/flutter_linux_gtk_shim/fl_standard_method_codec.c
@@ -261,21 +286,11 @@ add_library(
 
 set_target_properties(flutter_linux_gtk_shim PROPERTIES
   POSITION_INDEPENDENT_CODE ON
-  OUTPUT_NAME flutter_linux_gtk
 )
 
 target_link_libraries(flutter_linux_gtk_shim PUBLIC
+  flutter_linux_gtk_shim_api
   PkgConfig::DRM
-  PkgConfig::GLIB
-  PkgConfig::GOBJECT
-  PkgConfig::GIO
-)
-
-target_include_directories(flutter_linux_gtk_shim PUBLIC
-  ${CMAKE_SOURCE_DIR}/third_party/flutter_linux_gtk_shim/include
-  ${CMAKE_SOURCE_DIR}/third_party/flutter_embedder_header/include
-  ${CMAKE_SOURCE_DIR}/src
-  ${CMAKE_BINARY_DIR}
 )
 
 target_compile_options(flutter_linux_gtk_shim PUBLIC
@@ -288,6 +303,16 @@ target_compile_options(flutter_linux_gtk_shim PUBLIC
 
 
 target_link_libraries(flutter-drm-embedder PUBLIC flutter_linux_gtk_shim)
+
+# Nothing inside the embedder references the fl_* API -- only dlopen'd plugins do.
+# A plain static link would therefore drop every one of those archive members, so
+# force all of them in and export them via --export-dynamic so plugins can bind
+# against the executable at load time.
+# (Written as a raw linker flag rather than $<LINK_LIBRARY:WHOLE_ARCHIVE,...>
+# because that generator expression needs CMake 3.24 and CI builds on bullseye.)
+target_link_options(flutter-drm-embedder PRIVATE
+  "LINKER:--whole-archive,$<TARGET_FILE:flutter_linux_gtk_shim>,--no-whole-archive"
+)
 target_link_options(flutter-drm-embedder PUBLIC LINKER:--export-dynamic)
 
 # OpenAutoFlutter plugin build (uses GTK-style shim)
@@ -315,10 +340,12 @@ if (BUILD_OPENAUTOFLUTTER_PLUGIN)
     ${OPENAUTOFLUTTER_DIR}/linux/include
     ${OPENAUTOFLUTTER_DIR}/linux/av
     ${OPENAUTOFLUTTER_DIR}/linux/common
-    ${CMAKE_SOURCE_DIR}/third_party/flutter_linux_gtk_shim/include
   )
 
-  target_link_libraries(openautoflutter_plugin PRIVATE flutter_linux_gtk_shim PkgConfig::EPOXY Threads::Threads ${CMAKE_DL_LIBS})
+  # Headers and GLib only -- the fl_* symbols stay undefined here and are resolved
+  # from the flutter-drm-embedder executable at load time. Linking the shim archive
+  # would embed a second copy of the shim, with its own static state.
+  target_link_libraries(openautoflutter_plugin PRIVATE flutter_linux_gtk_shim_api PkgConfig::EPOXY Threads::Threads ${CMAKE_DL_LIBS})
   if (GTK_FOUND)
     target_link_libraries(openautoflutter_plugin PRIVATE PkgConfig::GTK)
   endif()
@@ -636,7 +663,7 @@ target_link_options(flutter_drm_embedder_module PUBLIC -rdynamic)
 
 # Define VULKAN_DEBUG if it was set to On, or if it was set to AUTO and we're using debug mode.
 if (VULKAN_DEBUG MATCHES AUTO)
-  if (CMAKE_BUILD_TYPE MATCHES DEBUG)
+  if (BUILD_TYPE_UPPER STREQUAL "DEBUG")
     set(VULKAN_DEBUG ON)
   else()
     set(VULKAN_DEBUG OFF)
@@ -688,7 +715,6 @@ target_link_libraries(
   flutter_drm_embedder_module
 )
 install(TARGETS flutter-drm-embedder RUNTIME DESTINATION bin)
-install(TARGETS flutter_linux_gtk_shim LIBRARY DESTINATION bin)
 
 # Enable lto if supported.
 cmake_policy(SET CMP0069 NEW)
@@ -698,7 +724,7 @@ include(CheckIPOSupported)
 set(USE_LTO OFF)
 # set(NEEDS_GOLD OFF)
 # set(NEEDS_LLD OFF)
-if(LTO AND (CMAKE_BUILD_TYPE STREQUAL Release OR CMAKE_BUILD_TYPE STREQUAL RelWithDebInfo))
+if(LTO AND (BUILD_TYPE_UPPER STREQUAL "RELEASE" OR BUILD_TYPE_UPPER STREQUAL "RELWITHDEBINFO"))
   # So people can specify `-fuse-ld=lld` in the CMAKE_C_FLAGS.
   # Otherwise check_ipo_supported will not use CMAKE_C_FLAGS.
   if (POLICY CMP0138)

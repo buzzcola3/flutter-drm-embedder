@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 #include "config.h"
+#include "fl_glib_dispatch_internal.h"
 #include "fl_plugin_registrar_internal.h"
 #include "flutter_drm_embedder_shim.h"
 #include "plugin_loader.h"

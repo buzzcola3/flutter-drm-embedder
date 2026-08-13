@@ -13,6 +13,7 @@
 
 #include <glib.h>
 
+#include "fl_glib_dispatch_internal.h"
 #include "flutter_drm_embedder_shim.h"
 
 // How often the default context is pumped. Sets the worst-case latency for a

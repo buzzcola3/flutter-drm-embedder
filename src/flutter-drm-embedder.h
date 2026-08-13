@@ -32,6 +32,13 @@
 #include "pixel_format.h"
 #include "util/collection.h"
 
+// The embedder <-> GTK-shim boundary. Declared there rather than here so the shim
+// translation units get those declarations without pulling in libinput/systemd/DRM.
+// Included here so this header and the definitions in flutter-drm-embedder.c end up
+// in one translation unit with it -- that is what makes a signature mismatch a
+// compile error instead of a silent runtime break.
+#include "flutter_linux_gtk_shim/flutter_drm_embedder_shim.h"
+
 enum device_orientation { kPortraitUp, kLandscapeLeft, kPortraitDown, kLandscapeRight };
 
 #define ORIENTATION_IS_LANDSCAPE(orientation) ((orientation) == kLandscapeLeft || (orientation) == kLandscapeRight)
@@ -151,44 +158,11 @@ struct flutter_drm_embedder_cmdline_args {
 
 int flutter_drm_embedder_fill_view_properties(bool has_orientation, enum device_orientation orientation, bool has_rotation, int rotation);
 
-int flutter_drm_embedder_post_platform_task(int (*callback)(void *userdata), void *userdata);
-
-int flutter_drm_embedder_post_platform_task_with_time(int (*callback)(void *userdata), void *userdata, uint64_t target_time_usec);
-
 int flutter_drm_embedder_sd_event_add_io(sd_event_source **source_out, int fd, uint32_t events, sd_event_io_handler_t callback, void *userdata);
-
-int flutter_drm_embedder_send_platform_message(
-    struct flutter_drm_embedder *flutter_drm_embedder,
-    const char *channel,
-    const uint8_t *restrict message,
-    size_t message_size,
-    FlutterPlatformMessageResponseHandle *responsehandle
-);
-
-int flutter_drm_embedder_respond_to_platform_message(
-    const FlutterPlatformMessageResponseHandle *handle,
-    const uint8_t *restrict message,
-    size_t message_size
-);
 
 bool flutter_drm_embedder_parse_cmdline_args(int argc, char **argv, struct flutter_drm_embedder_cmdline_args *result_out);
 
-void flutter_drm_embedder_set_gtk_plugin_loader(struct flutter_drm_embedder *flutter_drm_embedder, struct gtk_plugin_loader *loader);
-struct gtk_plugin_loader *flutter_drm_embedder_get_gtk_plugin_loader(struct flutter_drm_embedder *flutter_drm_embedder);
-
-void flutter_drm_embedder_set_fl_texture_registrar(struct flutter_drm_embedder *flutter_drm_embedder, void *registrar);
-void *flutter_drm_embedder_get_fl_texture_registrar(struct flutter_drm_embedder *flutter_drm_embedder);
-
 struct texture_registry *flutter_drm_embedder_get_texture_registry(struct flutter_drm_embedder *flutter_drm_embedder);
-
-struct plugin_registry *flutter_drm_embedder_get_plugin_registry(struct flutter_drm_embedder *flutter_drm_embedder);
-
-FlutterPlatformMessageResponseHandle *
-flutter_drm_embedder_create_platform_message_response_handle(struct flutter_drm_embedder *flutter_drm_embedder, FlutterDataCallback data_callback, void *userdata);
-
-void flutter_drm_embedder_release_platform_message_response_handle(struct flutter_drm_embedder *flutter_drm_embedder, FlutterPlatformMessageResponseHandle *handle);
-
-struct texture *flutter_drm_embedder_create_texture(struct flutter_drm_embedder *flutter_drm_embedder);
 
 const char *flutter_drm_embedder_get_asset_bundle_path(struct flutter_drm_embedder *flutter_drm_embedder);
 

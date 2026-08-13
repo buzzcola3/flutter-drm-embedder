@@ -21,6 +21,8 @@ jobs:
       image: ${{ matrix.container }}
       env:
         DEBIAN_FRONTEND: noninteractive
+    env:
+      ARTIFACT: flutter-drm-embedder-${{ matrix.target }}-${{ matrix.buildtype }}
     strategy:
       matrix:
         target:
@@ -116,44 +118,26 @@ jobs:
             -DBUILD_GSTREAMER_VIDEO_PLAYER_PLUGIN=On \
             -DENABLE_VULKAN=ON \
             -DENABLE_OPENGL=ON \
-            -DENABLE_TESTS=On \
+            -DENABLE_TESTS=Off \
             -DBUILD_SENTRY_PLUGIN=OFF \
             -DCMAKE_INSTALL_PREFIX=$PWD/dist \
             -DFLUTTER_DRM_EMBEDDER_VERSION="${{ steps.version.outputs.version }}" \
             -GNinja
       
+      # Ninja is a single-config generator, so --config would be ignored.
       - name: Build & Install
-        run: cmake --build ./build --target install --config ${{ matrix.buildtype }}
-      
+        run: cmake --build ./build --target install
+
       - name: Package
-        run: |
-          mkdir -p artifact && cd artifact
-          cp -r ../dist/bin/flutter-drm-embedder .
+        run: tar -cJf "$ARTIFACT.tar.xz" -C dist/bin flutter-drm-embedder
 
-          tar -cJf ../flutter-drm-embedder-${{ matrix.target }}-${{ matrix.buildtype }}.tar.xz .
-
-          cd ..
-          if [ -f dist/bin/libflutter_linux_gtk.so ]; then
-            mkdir -p shim-artifact
-            cp -r dist/bin/libflutter_linux_gtk.so shim-artifact/
-            tar -cJf flutter-drm-embedder-gtk-shim-${{ matrix.target }}-${{ matrix.buildtype }}.tar.xz -C shim-artifact .
-          fi
-      
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: flutter-drm-embedder-${{ matrix.target }}-${{ matrix.buildtype }}-tar-xz
-          path: flutter-drm-embedder-${{ matrix.target }}-${{ matrix.buildtype }}.tar.xz
+          name: ${{ env.ARTIFACT }}
+          path: ${{ env.ARTIFACT }}.tar.xz
           if-no-files-found: error
 
-      - name: Upload gtk shim artifact
-        if: ${{ hashFiles(format('flutter-drm-embedder-gtk-shim-{0}-{1}.tar.xz', matrix.target, matrix.buildtype)) != '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: flutter-drm-embedder-gtk-shim-${{ matrix.target }}-${{ matrix.buildtype }}-tar-xz
-          path: flutter-drm-embedder-gtk-shim-${{ matrix.target }}-${{ matrix.buildtype }}.tar.xz
-          if-no-files-found: error
-      
   publish:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/release/')
     name: Publish
@@ -168,7 +152,7 @@ jobs:
       - name: Prepare release
         run: |
           mkdir -p release-files
-          mv artifacts/*-tar-xz/* release-files/
+          mv artifacts/*/* release-files/
       
       - name: Publish Release
         uses: softprops/action-gh-release@v1

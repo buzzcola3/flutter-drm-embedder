@@ -17,11 +17,11 @@ struct texture_registry;
 struct plugin_registry *flutter_drm_embedder_get_plugin_registry(struct flutter_drm_embedder *flutter_drm_embedder);
 int flutter_drm_embedder_send_platform_message(struct flutter_drm_embedder *flutter_drm_embedder,
                                     const char *channel,
-                                    const uint8_t *message,
+                                    const uint8_t *restrict message,
                                     size_t message_size,
                                     FlutterPlatformMessageResponseHandle *responsehandle);
 int flutter_drm_embedder_respond_to_platform_message(const FlutterPlatformMessageResponseHandle *handle,
-                                          const uint8_t *message,
+                                          const uint8_t *restrict message,
                                           size_t message_size);
 
 FlutterPlatformMessageResponseHandle *flutter_drm_embedder_create_platform_message_response_handle(struct flutter_drm_embedder *flutter_drm_embedder,
@@ -42,9 +42,5 @@ int flutter_drm_embedder_post_platform_task(int (*callback)(void *userdata), voi
 int flutter_drm_embedder_post_platform_task_with_time(int (*callback)(void *userdata),
                                                      void *userdata,
                                                      uint64_t target_time_usec);
-
-/// Starts dispatching GLib's default main context on the platform thread.
-/// Idempotent. See fl_glib_dispatch.c for why plugins need this.
-void fl_glib_dispatch_start(void);
 
 #endif  // FLUTTER_DRM_EMBEDDER_SHIM_H
