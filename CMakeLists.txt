@@ -28,22 +28,10 @@ cmake_minimum_required(VERSION 3.10.0)
 # configure options
 option(BUILD_TEXT_INPUT_PLUGIN "Include the text input plugin in the finished binary. Enables text input (to flutter text fields, for example) via attached keyboards." ON)
 option(BUILD_RAW_KEYBOARD_PLUGIN "Include the raw keyboard plugin in the finished binary. Enables raw keycode listening in flutter via the flutter RawKeyboard interface." ON)
-option(BUILD_TEST_PLUGIN "Include the test plugin in the finished binary. Allows testing platform channel communication." OFF)
 
-option(BUILD_GSTREAMER_VIDEO_PLAYER_PLUGIN "Include the gstreamer based video plugins in the finished binary. Allows for more stable, hardware accelerated video playback in flutter using gstreamer." ON)
-option(TRY_BUILD_GSTREAMER_VIDEO_PLAYER_PLUGIN "Don't throw an error if the gstreamer libs aren't found, instead just don't build the gstreamer video player plugin in that case." ON)
+# App-level plugins are not built into the embedder. Ship them as shared libraries
+# in <bundle>/plugins/ and they'll be dlopen'd and registered through the GTK shim.
 
-option(BUILD_GSTREAMER_AUDIO_PLAYER_PLUGIN "Include the gstreamer based audio plugins in the finished binary." ON)
-option(TRY_BUILD_GSTREAMER_AUDIO_PLAYER_PLUGIN "Don't throw an error if the gstreamer libs aren't found, instead just don't build gstreamer audio plugin." ON)
-
-option(BUILD_SENTRY_PLUGIN "Include the sentry plugin in the finished binary. Allows for crash reporting to sentry.io." OFF)
-
-set(BUILD_FLUTTER_LINUX_GTK_SHIM ON)
-option(BUILD_OPENAUTOFLUTTER_PLUGIN "Build OpenAutoFlutter plugin from source." OFF)
-option(BUILD_GTK_SHIM_TEST_PLUGIN "Build minimal GTK shim test plugin (gtk_shim_test)." OFF)
-set(OPENAUTOFLUTTER_DIR "${CMAKE_SOURCE_DIR}/../OpenAutoFlutter" CACHE PATH "Path to the OpenAutoFlutter repo")
-
-option(BUILD_CHARSET_CONVERTER_PLUGIN "Include the charset converter plugin in the finished binary." OFF)
 option(ENABLE_OPENGL "Build with EGL/OpenGL rendering support." ON)
 option(TRY_ENABLE_OPENGL "Don't throw an error if EGL/OpenGL aren't found, instead just build without EGL/OpenGL support in that case." ON)
 option(ENABLE_VULKAN "Build with Vulkan rendering support." OFF)
@@ -72,9 +60,6 @@ set(FILESYSTEM_LAYOUTS default meta-flutter)
 set(FILESYSTEM_LAYOUT "default" CACHE STRING "Where to look for the icudtl.dat, app.so/libapp.so, flutter asset bundle.")
 set_property(CACHE FILESYSTEM_LAYOUT PROPERTY STRINGS ${FILESYSTEM_LAYOUTS})
 
-set(SENTRY_BACKEND "crashpad" CACHE STRING "What sentry backend to use, when the sentry plugin is built. Allowed values are inproc, crashpad and breakpad.")
-option(SENTRY_PLUGIN_BUNDLE_CRASHPAD_HANDLER "Bundle the crashpad_handler with the flutter-drm-embedder executable." ON)
-
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(NOT CMAKE_BUILD_TYPE)
@@ -88,11 +73,7 @@ endif()
 # expressions used for compile flags are case-insensitive already and need no help.
 string(TOUPPER "${CMAKE_BUILD_TYPE}" BUILD_TYPE_UPPER)
 
-if (BUILD_SENTRY_PLUGIN)
-  set(flutter_drm_embedder_languages C CXX ASM)
-else()
-  set(flutter_drm_embedder_languages C ASM)
-endif()
+set(flutter_drm_embedder_languages C ASM)
 
 project(flutter-drm-embedder LANGUAGES ${flutter_drm_embedder_languages} VERSION "1.0.0")
 
@@ -116,10 +97,6 @@ if (NOT DEFINED FLUTTER_DRM_EMBEDDER_VERSION OR FLUTTER_DRM_EMBEDDER_VERSION STR
 endif()
 message(STATUS "flutter-drm-embedder version: ${FLUTTER_DRM_EMBEDDER_VERSION}")
 
-if (BUILD_OPENAUTOFLUTTER_PLUGIN)
-  enable_language(CXX)
-endif()
-
 message(STATUS "Generator .............. ${CMAKE_GENERATOR}")
 message(STATUS "Build Type ............. ${CMAKE_BUILD_TYPE}")
 
@@ -137,10 +114,6 @@ pkg_check_modules(GLIB IMPORTED_TARGET glib-2.0)
 pkg_check_modules(GOBJECT IMPORTED_TARGET gobject-2.0)
 pkg_check_modules(GIO IMPORTED_TARGET gio-2.0)
 pkg_check_modules(GTK IMPORTED_TARGET gtk+-3.0)
-if (BUILD_OPENAUTOFLUTTER_PLUGIN)
-  pkg_check_modules(EPOXY REQUIRED IMPORTED_TARGET epoxy)
-endif()
-
 # find pthreads
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
@@ -191,16 +164,6 @@ add_library(
   src/plugins/services.c
 )
 
-if (BUILD_OPENAUTOFLUTTER_PLUGIN)
-  target_sources(flutter_drm_embedder_module PRIVATE src/flutter_linux_gtk_shim/openautoflutter_registrant.c)
-  target_compile_definitions(flutter_drm_embedder_module PUBLIC BUILD_OPENAUTOFLUTTER_PLUGIN)
-endif()
-
-if (BUILD_GTK_SHIM_TEST_PLUGIN)
-  target_sources(flutter_drm_embedder_module PRIVATE src/flutter_linux_gtk_shim/shim_test_plugin.c)
-  target_compile_definitions(flutter_drm_embedder_module PUBLIC BUILD_GTK_SHIM_TEST_PLUGIN)
-endif()
-
 target_link_libraries(flutter_drm_embedder_module PUBLIC
   PkgConfig::DRM
   PkgConfig::GBM
@@ -218,21 +181,6 @@ target_include_directories(flutter_drm_embedder_module PUBLIC
   ${CMAKE_SOURCE_DIR}/src
   ${CMAKE_BINARY_DIR}
 )
-
-if (BUILD_OPENAUTOFLUTTER_PLUGIN)
-  target_include_directories(flutter_drm_embedder_module PUBLIC
-    ${CMAKE_SOURCE_DIR}/third_party/flutter_linux_gtk_shim/include
-    ${OPENAUTOFLUTTER_DIR}/linux/include
-  )
-  target_link_libraries(flutter_drm_embedder_module PUBLIC
-    PkgConfig::GLIB
-    PkgConfig::GOBJECT
-    PkgConfig::GIO
-  )
-  if (GTK_FOUND)
-    target_link_libraries(flutter_drm_embedder_module PUBLIC PkgConfig::GTK)
-  endif()
-endif()
 
 target_compile_options(flutter_drm_embedder_module PUBLIC
   $<$<CONFIG:Debug>:-O0 -Wall -Wextra -Wno-sign-compare -Werror -ggdb -U_FORTIFY_SOURCE -DDEBUG>
@@ -315,119 +263,6 @@ target_link_options(flutter-drm-embedder PRIVATE
 )
 target_link_options(flutter-drm-embedder PUBLIC LINKER:--export-dynamic)
 
-# OpenAutoFlutter plugin build (uses GTK-style shim)
-if (BUILD_OPENAUTOFLUTTER_PLUGIN)
-  if (NOT EXISTS ${OPENAUTOFLUTTER_DIR}/linux/openautoflutter_plugin.cc)
-    message(SEND_ERROR "OpenAutoFlutter plugin sources not found. Set OPENAUTOFLUTTER_DIR correctly.")
-  endif()
-
-  add_library(openautoflutter_plugin SHARED
-    ${OPENAUTOFLUTTER_DIR}/linux/openautoflutter_plugin.cc
-    ${OPENAUTOFLUTTER_DIR}/linux/oat_message_handlers.cpp
-    ${OPENAUTOFLUTTER_DIR}/linux/av/oa_video_texture.cc
-    ${OPENAUTOFLUTTER_DIR}/linux/common/SharedMemoryConsumer.cpp
-    ${OPENAUTOFLUTTER_DIR}/linux/av/h264_decoder.cc
-  )
-
-  if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    message(WARNING "OpenAutoTransport prebuilt libs are built with clang/libc++; consider configuring with CC=clang CXX=clang++ if you hit ABI/linker errors.")
-  endif()
-
-  set_target_properties(openautoflutter_plugin PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES)
-  target_compile_definitions(openautoflutter_plugin PRIVATE FLUTTER_PLUGIN_IMPL)
-
-  target_include_directories(openautoflutter_plugin PRIVATE
-    ${OPENAUTOFLUTTER_DIR}/linux/include
-    ${OPENAUTOFLUTTER_DIR}/linux/av
-    ${OPENAUTOFLUTTER_DIR}/linux/common
-  )
-
-  # Headers and GLib only -- the fl_* symbols stay undefined here and are resolved
-  # from the flutter-drm-embedder executable at load time. Linking the shim archive
-  # would embed a second copy of the shim, with its own static state.
-  target_link_libraries(openautoflutter_plugin PRIVATE flutter_linux_gtk_shim_api PkgConfig::EPOXY Threads::Threads ${CMAKE_DL_LIBS})
-  if (GTK_FOUND)
-    target_link_libraries(openautoflutter_plugin PRIVATE PkgConfig::GTK)
-  endif()
-
-  # OpenAutoTransport (prebuilt) fetch + link
-  set(OPENAUTO_TRANSPORT_VERSION "v0.0.24" CACHE STRING "OpenAutoTransport release tag" FORCE)
-  if (NOT DEFINED OPENAUTO_TRANSPORT_VARIANT)
-    string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _proc)
-    if (_proc MATCHES "x86_64|amd64")
-      set(OPENAUTO_TRANSPORT_VARIANT "amd64_gnu")
-    elseif (_proc MATCHES "aarch64|arm64")
-      set(OPENAUTO_TRANSPORT_VARIANT "arm64_gnu")
-    else()
-      message(SEND_ERROR "Unsupported processor ${CMAKE_SYSTEM_PROCESSOR}; set OPENAUTO_TRANSPORT_VARIANT manually (amd64_gnu|amd64_musl|arm64_gnu|arm64_musl)")
-    endif()
-  endif()
-
-  set(_oat_base_url "https://github.com/buzzcola3/OpenAutoTransport/releases/download/${OPENAUTO_TRANSPORT_VERSION}")
-  set(_oat_prefix "${CMAKE_BINARY_DIR}/openautotransport/${OPENAUTO_TRANSPORT_VERSION}/prebuilt")
-  file(MAKE_DIRECTORY "${_oat_prefix}/include" "${_oat_prefix}/lib")
-
-  function(_oat_fetch _name _dest_dir _out_var)
-    set(_url "${_oat_base_url}/${_name}")
-    set(_dest "${_dest_dir}/${_name}")
-    set(_needs_fetch TRUE)
-    if (EXISTS "${_dest}")
-      file(SIZE "${_dest}" _size)
-      if (_size GREATER 0)
-        set(_needs_fetch FALSE)
-      else()
-        file(REMOVE "${_dest}")
-      endif()
-    endif()
-    if (_needs_fetch)
-      file(DOWNLOAD "${_url}" "${_dest}" SHOW_PROGRESS STATUS _status)
-      list(GET _status 0 _code)
-      if (NOT _code EQUAL 0)
-        message(SEND_ERROR "Failed to download ${_url}: ${_status}")
-      endif()
-      file(SIZE "${_dest}" _size_after)
-      if (NOT _size_after GREATER 0)
-        message(SEND_ERROR "Downloaded ${_url} but file is empty")
-      endif()
-    endif()
-    set(${_out_var} "${_dest}" PARENT_SCOPE)
-  endfunction()
-
-  _oat_fetch("wire.hpp" "${_oat_prefix}/include" _oat_wire_hpp)
-  _oat_fetch("transport.hpp" "${_oat_prefix}/include" _oat_transport_hpp)
-  _oat_fetch("wire.capnp.h" "${_oat_prefix}/include" _oat_wire_capnp_h)
-  _oat_fetch("wire.capnp.c++" "${_oat_prefix}/include" _oat_wire_capnp_cpp)
-
-  _oat_fetch("libopen_auto_transport-${OPENAUTO_TRANSPORT_VARIANT}.a" "${_oat_prefix}/lib" _oat_lib_path)
-  _oat_fetch("libcapnp-${OPENAUTO_TRANSPORT_VARIANT}.a" "${_oat_prefix}/lib" _oat_capnp_path)
-  _oat_fetch("libkj-${OPENAUTO_TRANSPORT_VARIANT}.a" "${_oat_prefix}/lib" _oat_kj_path)
-
-  add_library(open_auto_transport STATIC IMPORTED)
-  set_target_properties(open_auto_transport PROPERTIES IMPORTED_LOCATION "${_oat_lib_path}")
-  add_library(open_auto_transport_capnp STATIC IMPORTED)
-  set_target_properties(open_auto_transport_capnp PROPERTIES IMPORTED_LOCATION "${_oat_capnp_path}")
-  add_library(open_auto_transport_kj STATIC IMPORTED)
-  set_target_properties(open_auto_transport_kj PROPERTIES IMPORTED_LOCATION "${_oat_kj_path}")
-
-  target_include_directories(openautoflutter_plugin PRIVATE "${_oat_prefix}/include")
-  target_sources(openautoflutter_plugin PRIVATE "${_oat_wire_capnp_cpp}")
-  target_link_libraries(openautoflutter_plugin PRIVATE open_auto_transport open_auto_transport_capnp open_auto_transport_kj)
-
-  # libc++ required by OpenAutoTransport prebuilt libs
-  target_compile_options(openautoflutter_plugin PRIVATE -stdlib=libc++)
-  target_link_options(openautoflutter_plugin PRIVATE -stdlib=libc++)
-  target_link_libraries(openautoflutter_plugin PRIVATE c++ c++abi)
-
-  # FFmpeg (libav) for software H264 decoding
-  find_library(AVCODEC_LIB avcodec)
-  find_library(AVUTIL_LIB avutil)
-  find_library(SWSCALE_LIB swscale)
-  if (AVCODEC_LIB AND AVUTIL_LIB AND SWSCALE_LIB)
-    target_link_libraries(openautoflutter_plugin PRIVATE ${AVCODEC_LIB} ${AVUTIL_LIB} ${SWSCALE_LIB})
-  endif()
-
-  target_link_libraries(flutter-drm-embedder PUBLIC openautoflutter_plugin)
-endif()
 
 # GCC prior to 11.3 reports false positives for missing-field-initializers warning.
 if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
@@ -558,105 +393,6 @@ endif()
 if (BUILD_RAW_KEYBOARD_PLUGIN)
   target_sources(flutter_drm_embedder_module PRIVATE src/plugins/raw_keyboard.c)
 endif()
-if (BUILD_TEST_PLUGIN)
-  target_sources(flutter_drm_embedder_module PRIVATE src/plugins/testplugin.c)
-endif()
-if (BUILD_GSTREAMER_VIDEO_PLAYER_PLUGIN)
-  if (NOT HAVE_EGL_GLES2)
-    message(NOTICE "EGL and OpenGL ES2 are required for gstreamer video player. Gstreamer video player plugin won't be build.")
-  else()
-    if (TRY_BUILD_GSTREAMER_VIDEO_PLAYER_PLUGIN)
-      pkg_check_modules(LIBGSTREAMER IMPORTED_TARGET gstreamer-1.0)
-      pkg_check_modules(LIBGSTREAMER_PLUGINS_BASE IMPORTED_TARGET gstreamer-plugins-base-1.0)
-      pkg_check_modules(LIBGSTREAMER_APP IMPORTED_TARGET gstreamer-app-1.0)
-      pkg_check_modules(LIBGSTREAMER_ALLOCATORS IMPORTED_TARGET gstreamer-allocators-1.0)
-      pkg_check_modules(LIBGSTREAMER_VIDEO IMPORTED_TARGET gstreamer-video-1.0)
-    else()
-      pkg_check_modules(LIBGSTREAMER REQUIRED IMPORTED_TARGET gstreamer-1.0)
-      pkg_check_modules(LIBGSTREAMER_PLUGINS_BASE REQUIRED IMPORTED_TARGET gstreamer-plugins-base-1.0)
-      pkg_check_modules(LIBGSTREAMER_APP REQUIRED IMPORTED_TARGET gstreamer-app-1.0)
-      pkg_check_modules(LIBGSTREAMER_ALLOCATORS REQUIRED IMPORTED_TARGET gstreamer-allocators-1.0)
-      pkg_check_modules(LIBGSTREAMER_VIDEO REQUIRED IMPORTED_TARGET gstreamer-video-1.0)
-    endif()
-
-    if (LIBGSTREAMER_FOUND AND LIBGSTREAMER_PLUGINS_BASE_FOUND AND LIBGSTREAMER_APP_FOUND AND LIBGSTREAMER_ALLOCATORS_FOUND AND LIBGSTREAMER_VIDEO_FOUND)
-      # There's no other way to query the libinput version (in code) somehow.
-      # So we need to roll our own libinput version macro
-      string(REPLACE "." ";" LIBGSTREAMER_VERSION_AS_LIST ${LIBGSTREAMER_VERSION})
-      list(GET LIBGSTREAMER_VERSION_AS_LIST 0 LIBGSTREAMER_VERSION_MAJOR)
-      list(GET LIBGSTREAMER_VERSION_AS_LIST 1 LIBGSTREAMER_VERSION_MINOR)
-      list(GET LIBGSTREAMER_VERSION_AS_LIST 2 LIBGSTREAMER_VERSION_PATCH)
-
-      target_sources(flutter_drm_embedder_module PRIVATE
-        src/plugins/gstreamer_video_player/plugin.c
-        src/plugins/gstreamer_video_player/player.c
-        src/plugins/gstreamer_video_player/frame.c
-      )
-      target_link_libraries(flutter_drm_embedder_module PUBLIC
-        PkgConfig::LIBGSTREAMER
-        PkgConfig::LIBGSTREAMER_PLUGINS_BASE
-        PkgConfig::LIBGSTREAMER_APP
-        PkgConfig::LIBGSTREAMER_ALLOCATORS
-        PkgConfig::LIBGSTREAMER_VIDEO
-      )
-    else()
-      message(NOTICE "Couldn't find gstreamer libraries. Gstreamer video player plugin won't be build.")
-    endif()
-  endif()
-endif()
-
-if (BUILD_GSTREAMER_AUDIO_PLAYER_PLUGIN)
-  if (TRY_BUILD_GSTREAMER_AUDIO_PLAYER_PLUGIN)
-    pkg_check_modules(LIBGSTREAMER IMPORTED_TARGET gstreamer-1.0)
-    pkg_check_modules(LIBGSTREAMER_APP IMPORTED_TARGET gstreamer-app-1.0)
-    pkg_check_modules(LIBGSTREAMER_AUDIO IMPORTED_TARGET gstreamer-audio-1.0)
-  else()
-    pkg_check_modules(LIBGSTREAMER REQUIRED IMPORTED_TARGET gstreamer-1.0)
-    pkg_check_modules(LIBGSTREAMER_APP REQUIRED IMPORTED_TARGET gstreamer-app-1.0)
-    pkg_check_modules(LIBGSTREAMER_AUDIO REQUIRED IMPORTED_TARGET gstreamer-audio-1.0)
-  endif()
-
-  if (LIBGSTREAMER_FOUND AND LIBGSTREAMER_APP_FOUND AND LIBGSTREAMER_AUDIO_FOUND)
-    target_sources(flutter_drm_embedder_module PRIVATE
-      src/plugins/audioplayers/plugin.c
-      src/plugins/audioplayers/player.c
-    )
-    target_link_libraries(flutter_drm_embedder_module PUBLIC
-      PkgConfig::LIBGSTREAMER
-      PkgConfig::LIBGSTREAMER_APP
-      PkgConfig::LIBGSTREAMER_AUDIO
-    )
-  else()
-    message(NOTICE "Couldn't find gstreamer libraries. Gstreamer audio player plugin won't be build.")
-  endif()
-endif()
-
-if (BUILD_CHARSET_CONVERTER_PLUGIN)
-  target_sources(flutter_drm_embedder_module PRIVATE src/plugins/charset_converter.c)
-endif()
-
-# Sentry Plugin
-set(HAVE_BUNDLED_CRASHPAD_HANDLER OFF)
-if (BUILD_SENTRY_PLUGIN)
-  set(SENTRY_PIC ${CMAKE_POSITION_INDEPENDENT_CODE} CACHE BOOL "")
-  add_subdirectory(third_party/sentry-native)
-
-  target_sources(flutter_drm_embedder_module PRIVATE src/plugins/sentry/sentry.c)
-  target_link_libraries(flutter_drm_embedder_module PUBLIC sentry::sentry)
-
-  if (SENTRY_BACKEND STREQUAL "crashpad" AND SENTRY_PLUGIN_BUNDLE_CRASHPAD_HANDLER)
-    set(HAVE_BUNDLED_CRASHPAD_HANDLER ON)
-  
-    target_sources(flutter-drm-embedder PRIVATE src/crashpad_handler_trampoline.cc)
-    # link against the same libraries the crashpad_handler uses
-    
-    get_target_property(handler_deps crashpad_handler INTERFACE_LINK_LIBRARIES)
-    target_link_libraries(flutter-drm-embedder PUBLIC ${handler_deps})
-  endif()
-endif()
-message(STATUS "Sentry plugin .......... ${BUILD_SENTRY_PLUGIN}")
-message(STATUS "Bundle crashpad_handler  ${HAVE_BUNDLED_CRASHPAD_HANDLER}")
-
 # Needed so dart VM can actually resolve symbols in the same
 # executable. (For dart:ffi DynamicLibrary.executable / DynamicLibrary.process)
 target_link_options(flutter_drm_embedder_module PUBLIC -rdynamic)

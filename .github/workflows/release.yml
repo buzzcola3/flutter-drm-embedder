@@ -76,7 +76,7 @@ jobs:
           apt-get -o Acquire::Retries=5 update && apt-get install -y --fix-missing \
             git cmake ninja-build clang lld xz-utils \
             libdrm-dev:$ARCH libgbm-dev:$ARCH libsystemd-dev:$ARCH libinput-dev:$ARCH libudev-dev:$ARCH libxkbcommon-dev:$ARCH \
-            libgstreamer-plugins-base1.0-dev:$ARCH \
+            libglib2.0-dev:$ARCH \
             libvulkan-dev:$ARCH \
             libgl1-mesa-dev:$ARCH libgles2-mesa-dev:$ARCH libegl1-mesa-dev:$ARCH \
             ${{ matrix.is-cross && format('gcc-{0} g++-{0}', matrix.target) || '' }}
@@ -114,12 +114,9 @@ jobs:
             -DCMAKE_C_COMPILER=clang \
             -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld" \
             -DCMAKE_CXX_COMPILER=clang++ \
-            -DBUILD_GSTREAMER_AUDIO_PLAYER_PLUGIN=On \
-            -DBUILD_GSTREAMER_VIDEO_PLAYER_PLUGIN=On \
             -DENABLE_VULKAN=ON \
             -DENABLE_OPENGL=ON \
             -DENABLE_TESTS=Off \
-            -DBUILD_SENTRY_PLUGIN=OFF \
             -DCMAKE_INSTALL_PREFIX=$PWD/dist \
             -DFLUTTER_DRM_EMBEDDER_VERSION="${{ steps.version.outputs.version }}" \
             -GNinja

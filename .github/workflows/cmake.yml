@@ -55,7 +55,7 @@ jobs:
       #     sudo apt-get install -y \
       #       git cmake libgl1-mesa-dev libgles2-mesa-dev libegl1-mesa-dev libdrm-dev libgbm-dev \
       #       ttf-mscorefonts-installer fontconfig libsystemd-dev libinput-dev libudev-dev \
-      #       libxkbcommon-dev ninja-build libgstreamer-plugins-base1.0-dev \
+      #       libxkbcommon-dev ninja-build libglib2.0-dev \
       #       ${{ matrix.vulkan-deps }} \
       #       ${{ matrix.clang-deps }}
 
@@ -79,8 +79,6 @@ jobs:
             -B ./build \
             -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
             -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
-            -DBUILD_GSTREAMER_AUDIO_PLAYER_PLUGIN=On \
-            -DBUILD_GSTREAMER_VIDEO_PLAYER_PLUGIN=On \
             -DENABLE_VULKAN=${{ matrix.enable-vulkan }} \
             -DENABLE_OPENGL=${{ matrix.enable-opengl }} \
             -DENABLE_TESTS=On \
@@ -118,11 +116,6 @@ jobs:
         build-type:
           - Debug
           - Release
-        sentry-plugin:
-          - "off"
-          - "on-inproc"
-          - "on-crashpad-bundled"
-          - "on-crashpad-unbundled"
         include:
           - graphics-backends: "vulkan-only"
             enable-vulkan: "on"
@@ -149,27 +142,6 @@ jobs:
           - compiler: "clang"
             cxx-compiler: "clang++"
             clang-deps: "clang"
-
-          - sentry-plugin: "off"
-            sentry-plugin-enable: "off"
-            sentry-deps: ""
-
-          - sentry-plugin: "on-inproc"
-            sentry-plugin-enable: "on"
-            sentry-backend: "inproc"
-            sentry-deps: "libcurl4-openssl-dev"
-
-          - sentry-plugin: "on-crashpad-bundled"
-            sentry-plugin-enable: "on"
-            sentry-backend: "crashpad"
-            sentry-bundled-crashpad-handler: "on"
-            sentry-deps: "libcurl4-openssl-dev"
-
-          - senty-plugin: "on-crashpad-unbundled"
-            sentry-plugin-enable: "on"
-            sentry-backend: "crashpad"
-            sentry-bundled-crashpad-handler: "off"
-            sentry-deps: "libcurl4-openssl-dev"
     steps:
       # git needs to be installed before checking out, otherwise the checkout will fallback to the REST API,
       # and the submodule download won't work.
@@ -178,12 +150,11 @@ jobs:
           apt-get update && apt-get install -y \
             git cmake libdrm-dev libgbm-dev \
             fonts-liberation fontconfig libsystemd-dev libinput-dev libudev-dev \
-            libxkbcommon-dev ninja-build libgstreamer-plugins-base1.0-dev \
+            libxkbcommon-dev ninja-build libglib2.0-dev \
             ${{ matrix.vulkan-deps }} \
             ${{ matrix.opengl-deps }} \
             ${{ matrix.gcc-deps }} \
-            ${{ matrix.clang-deps }} \
-            ${{ matrix.sentry-deps }}
+            ${{ matrix.clang-deps }}
 
       - uses: actions/checkout@v3
         with:
@@ -207,14 +178,9 @@ jobs:
             -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
             -DCMAKE_C_COMPILER=${{ matrix.compiler }} \
             -DCMAKE_CXX_COMPILER=${{ matrix.cxx-compiler }} \
-            -DBUILD_GSTREAMER_AUDIO_PLAYER_PLUGIN=On \
-            -DBUILD_GSTREAMER_VIDEO_PLAYER_PLUGIN=On \
             -DENABLE_VULKAN=${{ matrix.enable-vulkan }} \
             -DENABLE_OPENGL=${{ matrix.enable-opengl }} \
             -DENABLE_TESTS=On \
-            -DBUILD_SENTRY_PLUGIN=${{ matrix.sentry-plugin-enable }} \
-            -DSENTRY_BACKEND=${{ matrix.sentry-backend }} \
-            -DSENTRY_PLUGIN_BUNDLE_CRASHPAD_HANDLER=${{ matrix.sentry-bundled-crashpad-handler }} \
             -DFLUTTER_DRM_EMBEDDER_VERSION="${{ steps.version.outputs.version }}" \
             -GNinja
 

@@ -1,6 +1,0 @@
-[
-  {
-    "path": "../build-docker/libopenautoflutter_plugin.so",
-    "symbol": "openautoflutter_plugin_register_with_registrar"
-  }
-]
