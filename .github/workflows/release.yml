@@ -158,18 +158,18 @@ jobs:
       - name: Delete stale release assets
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
         run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          TAG_ENC="${TAG//\//%2F}"
-          ids=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG_ENC}" --jq '.assets[].id' 2>/dev/null || true)
-          if [ -z "$ids" ]; then
-            echo "No existing release/assets for $TAG, nothing to clean."
+          # The release doesn't exist yet on a first publish; that's not an error.
+          if ! assets=$(gh release view "$TAG" --json assets --jq '.assets[].name'); then
+            echo "No existing release for $TAG, nothing to clean."
             exit 0
           fi
-          for id in $ids; do
-            echo "Deleting stale asset $id"
-            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/$id"
-          done
+          while IFS= read -r name; do
+            [ -n "$name" ] || continue
+            echo "Deleting stale asset $name"
+            gh release delete-asset "$TAG" "$name" --yes
+          done <<< "$assets"
       
       - name: Publish Release
         uses: softprops/action-gh-release@v1
